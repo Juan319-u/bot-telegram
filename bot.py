@@ -1,10 +1,10 @@
+import cloudscraper
 import requests
 import time
 import os
-from playwright.sync_api import sync_playwright
 
 # =========================
-# CONFIGURACIÓN
+# CONFIG
 # =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -13,16 +13,19 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 MODELOS = {
     "Victoria & Michael": "https://www.cbhours.com/user/victoria_and_michael.html",
-    #"Kelly Fernandes": "https://www.cbhours.com/user/kellyfernandes.html",
+    "Kelly Fernandes": "https://www.cbhours.com/user/kellyfernandes.html",
     "Cristal Bunny": "https://www.cbhours.com/user/cristal_bunny.html",
-    #"Jimmy Mia Couple": "https://www.cbhours.com/user/jimmymiacouple.html",
-    #"Ashley Ospino": "https://www.cbhours.com/user/ashley_ospino.html",
-    #"Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
+    "Jimmy Mia Couple": "https://www.cbhours.com/user/jimmymiacouple.html",
+    "Ashley Ospino": "https://www.cbhours.com/user/ashley_ospino.html",
+    "Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
 }
 
 estados_anteriores = {m: None for m in MODELOS}
 ACTIVO = True
 LAST_UPDATE_ID = 0
+
+# scraper anti-cloudflare ligero
+scraper = cloudscraper.create_scraper()
 
 
 # =========================
@@ -46,15 +49,15 @@ def procesar_comandos():
 
     try:
         url = f"{BASE_URL}/getUpdates?offset={LAST_UPDATE_ID + 1}"
-        response = requests.get(url, timeout=10).json()
+        data = requests.get(url, timeout=10).json()
 
-        for update in response.get("result", []):
-            LAST_UPDATE_ID = update["update_id"]
+        for u in data.get("result", []):
+            LAST_UPDATE_ID = u["update_id"]
 
-            if "message" not in update:
+            if "message" not in u:
                 continue
 
-            msg = update["message"]
+            msg = u["message"]
             chat_id = str(msg.get("chat", {}).get("id"))
             text = msg.get("text", "").strip().lower()
 
@@ -65,39 +68,31 @@ def procesar_comandos():
 
             if text == "/on":
                 ACTIVO = True
-                enviar_mensaje("🟢 Bot ACTIVADO")
+                enviar_mensaje("🟢 BOT ACTIVADO")
 
             elif text == "/off":
                 ACTIVO = False
-                enviar_mensaje("🔴 Bot DESACTIVADO")
+                enviar_mensaje("🔴 BOT DESACTIVADO")
 
             elif text == "/status":
                 enviar_mensaje(f"Estado: {'ACTIVO 🟢' if ACTIVO else 'INACTIVO 🔴'}")
-
 
     except Exception as e:
         print("Error comandos:", e)
 
 
 # =========================
-# PLAYWRIGHT INIT (IMPORTANTE)
-# =========================
-print("Iniciando navegador...")
-
-play = sync_playwright().start()
-browser = play.chromium.launch(headless=True, args=["--no-sandbox"])
-page = browser.new_page()
-
-# =========================
-# SCRAPER REAL (REUTILIZA PÁGINA)
+# SCRAPER ESTABLE
 # =========================
 def obtener_estado(url):
     try:
-        page.goto(url, timeout=60000)
-        page.wait_for_timeout(3000)
+        r = scraper.get(url, timeout=15)
 
-        html = page.content().lower()
+        html = r.text.lower()
 
+        print("HTML SIZE:", len(html))
+
+        # detección simple y robusta
         if "online" in html:
             return "online"
         elif "offline" in html:
@@ -106,15 +101,15 @@ def obtener_estado(url):
         return None
 
     except Exception as e:
-        print("Playwright error:", e)
+        print("Scraper error:", e)
         return None
 
 
 # =========================
 # INICIO
 # =========================
-enviar_mensaje("🤖 Bot Playwright estable iniciado")
-print("Bot iniciado")
+enviar_mensaje("🤖 Bot estable iniciado (cloudscraper)")
+print("Bot iniciado...")
 
 
 # =========================
@@ -125,7 +120,7 @@ while True:
         procesar_comandos()
 
         if not ACTIVO:
-            time.sleep(10)
+            time.sleep(15)
             continue
 
         modelos_online = []
@@ -134,6 +129,7 @@ while True:
             estado = obtener_estado(url)
             print(f"{nombre}: {estado}")
 
+            # alerta solo en cambio
             if estado == "online" and estados_anteriores[nombre] != "online":
                 enviar_mensaje(f"🔥 {nombre} está ONLINE 🔥")
 
@@ -142,6 +138,7 @@ while True:
 
             estados_anteriores[nombre] = estado
 
+        # resumen
         if len(modelos_online) > 1:
             lista = "\n".join(modelos_online)
             enviar_mensaje(f"🔥 {len(modelos_online)} modelos online:\n{lista}")
@@ -150,4 +147,4 @@ while True:
 
     except Exception as e:
         print("Error general:", e)
-        time.sleep(10)
+        time.sleep(20)
