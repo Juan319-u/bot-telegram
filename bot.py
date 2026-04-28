@@ -84,29 +84,31 @@ def obtener_estado(url):
         print("\n===================")
         print("STATUS:", r.status_code)
         print("HTML SIZE:", len(r.text))
-        print("SAMPLE:\n", r.text[:500])
         print("===================\n")
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        estado = soup.find("span", class_="room_status_text")
+        # 🔥 buscar cualquier elemento con esa clase
+        estado = soup.select(".room_status_text")
+
+        print("ELEMENTOS ENCONTRADOS:", len(estado))
 
         if estado:
-            clases = estado.get("class", [])
-            print("CLASES:", clases)
+            el = estado[0]
+            clases = el.get("class", [])
+            print("CLASES REALES:", clases)
 
             if "online" in clases:
                 return "online"
             elif "offline" in clases:
                 return "offline"
 
-        print("⚠ no se encontró selector")
+        print("⚠ NO SE ENCONTRÓ ESTADO REAL")
         return None
 
     except Exception as e:
-        print("SCRAPER ERROR:", e)
+        print("ERROR SCRAPER:", e)
         return None
-
 
 # =========================
 # INICIO
