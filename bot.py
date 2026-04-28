@@ -2,11 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import os
-import datetime
 
-# =========================
-# CONFIG
-# =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
@@ -14,9 +10,8 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 MODELO_URL = "https://www.cbhours.com/user/camilamonroee.html"
 
-estado_anterior = None
-ACTIVO = True
 LAST_UPDATE_ID = 0
+ACTIVO = True
 
 
 # =========================
@@ -29,103 +24,93 @@ def enviar_mensaje(texto):
             "text": texto
         })
     except Exception as e:
-        print("Error enviar mensaje:", e)
-
-
-def enviar_menu():
-    teclado = {
-        "keyboard": [
-            ["🟢 Activar", "🔴 Desactivar"],
-            ["📊 Estado"]
-        ],
-        "resize_keyboard": True
-    }
-
-    requests.post(f"{BASE_URL}/sendMessage", json={
-        "chat_id": CHAT_ID,
-        "text": "Control del bot 👇",
-        "reply_markup": teclado
-    })
-
-
-# =========================
-# SCRAPER
-# =========================
-def obtener_estado(url):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        estado = soup.find("span", class_="room_status_text")
-
-        if estado:
-            clases = estado.get("class", [])
-
-            if "online" in clases:
-                return "online"
-            elif "offline" in clases:
-                return "offline"
-
-        return None
-
-    except Exception as e:
-        print("Error scraping:", e)
-        return None
+        print("Error Telegram:", e)
 
 
 # =========================
 # COMANDOS
 # =========================
 def procesar_comandos():
-    global ACTIVO, LAST_UPDATE_ID
+    global LAST_UPDATE_ID, ACTIVO
 
     try:
         url = f"{BASE_URL}/getUpdates?offset={LAST_UPDATE_ID + 1}"
         data = requests.get(url).json()
 
-        for update in data.get("result", []):
-            LAST_UPDATE_ID = update["update_id"]
+        for u in data.get("result", []):
+            LAST_UPDATE_ID = u["update_id"]
 
-            if "message" not in update:
+            if "message" not in u:
                 continue
 
-            msg = update["message"]
+            msg = u["message"]
             chat_id = str(msg.get("chat", {}).get("id"))
             text = msg.get("text", "").strip().lower()
 
             if chat_id != str(CHAT_ID):
                 continue
 
-            print("Comando:", text)
+            print("📩 Comando recibido:", text)
 
-            # =========================
-            # COMANDOS NUEVOS
-            # =========================
             if text == "/on":
                 ACTIVO = True
-                enviar_mensaje("🟢 Bot ACTIVADO")
+                enviar_mensaje("🟢 BOT ACTIVADO")
 
             elif text == "/off":
                 ACTIVO = False
-                enviar_mensaje("🔴 Bot DESACTIVADO")
+                enviar_mensaje("🔴 BOT DESACTIVADO")
 
             elif text == "/status":
-                estado = "ACTIVO 🟢" if ACTIVO else "INACTIVO 🔴"
-                enviar_mensaje(f"Estado: {estado}")
-
-            enviar_menu()
+                enviar_mensaje(f"Estado bot: {'ACTIVO' if ACTIVO else 'INACTIVO'}")
 
     except Exception as e:
         print("Error comandos:", e)
 
 
 # =========================
+# SCRAPER DEBUG
+# =========================
+def obtener_estado(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        r = requests.get(url, headers=headers, timeout=15)
+
+        print("\n====================")
+        print("STATUS CODE:", r.status_code)
+        print("HTML SIZE:", len(r.text))
+        print("HTML SAMPLE:\n", r.text[:800])
+        print("====================\n")
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        estado = soup.find("span", class_="room_status_text")
+
+        if estado:
+            clases = estado.get("class", [])
+            print("CLASES DETECTADAS:", clases)
+
+            if "online" in clases:
+                return "online"
+            elif "offline" in clases:
+                return "offline"
+
+        print("⚠ NO SE ENCONTRÓ EL SELECTOR")
+        return None
+
+    except Exception as e:
+        print("ERROR SCRAPER:", e)
+        return None
+
+
+# =========================
 # INICIO
 # =========================
-enviar_mensaje("🤖 Bot de prueba iniciado (1 modelo)")
-enviar_menu()
+enviar_mensaje("🤖 BOT DEBUG INICIADO")
 
+print("Bot iniciado...")
 
 # =========================
 # LOOP
@@ -135,24 +120,19 @@ while True:
         procesar_comandos()
 
         if not ACTIVO:
-            print("Bot apagado...")
-            time.sleep(15)
+            print("⛔ Bot pausado")
+            time.sleep(10)
             continue
 
         estado = obtener_estado(MODELO_URL)
-        print("Estado modelo:", estado)
 
-        # 🔥 DETECCIÓN DE CAMBIO REAL
-        if estado == "online" and estado_anterior != "online":
+        print("👉 ESTADO FINAL DETECTADO:", estado)
+
+        if estado == "online":
             enviar_mensaje("🔥 MODELO ONLINE DETECTADA 🔥")
 
-        estado_anterior = estado
-
-        # =========================
-        # frecuencia simple (debug)
-        # =========================
         time.sleep(60)
 
     except Exception as e:
-        print("Error general:", e)
-        time.sleep(30)
+        print("ERROR GENERAL:", e)
+        time.sleep(10)
