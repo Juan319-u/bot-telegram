@@ -1,8 +1,7 @@
-import cloudscraper
-from bs4 import BeautifulSoup
-import requests
-import time
 import os
+import time
+import requests
+from playwright.sync_api import sync_playwright
 
 # =========================
 # CONFIG
@@ -16,9 +15,6 @@ MODELO_URL = "https://www.cbhours.com/user/camilamonroee.html"
 
 LAST_UPDATE_ID = 0
 ACTIVO = True
-
-# Scraper con bypass Cloudflare
-scraper = cloudscraper.create_scraper()
 
 
 # =========================
@@ -57,7 +53,7 @@ def procesar_comandos():
             if chat_id != str(CHAT_ID):
                 continue
 
-            print("📩 comando:", text)
+            print("Comando:", text)
 
             if text == "/on":
                 ACTIVO = True
@@ -75,64 +71,62 @@ def procesar_comandos():
 
 
 # =========================
-# SCRAPER (CLOUDFLARE BYPASS)
+# SCRAPER DEFINITIVO (PLAYWRIGHT)
 # =========================
-def obtener_estado(url):
+def obtener_estado():
     try:
-        r = scraper.get(url, timeout=15)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
 
-        print("\n===================")
-        print("STATUS:", r.status_code)
-        print("HTML SIZE:", len(r.text))
-        print("===================\n")
+            page.goto(MODELO_URL, timeout=60000)
+            page.wait_for_timeout(5000)  # espera JS
 
-        soup = BeautifulSoup(r.text, "html.parser")
+            html = page.content()
 
-        # 🔥 buscar cualquier elemento con esa clase
-        estado = soup.select(".room_status_text")
+            browser.close()
 
-        print("ELEMENTOS ENCONTRADOS:", len(estado))
+            print("\n===================")
+            print("HTML SIZE:", len(html))
+            print("===================\n")
 
-        if estado:
-            el = estado[0]
-            clases = el.get("class", [])
-            print("CLASES REALES:", clases)
+            # 🔥 DETECCIÓN FLEXIBLE (NO depende de clase exacta)
+            lower = html.lower()
 
-            if "online" in clases:
+            if "online" in lower:
                 return "online"
-            elif "offline" in clases:
+            elif "offline" in lower:
                 return "offline"
 
-        print("⚠ NO SE ENCONTRÓ ESTADO REAL")
-        return None
+            return None
 
     except Exception as e:
-        print("ERROR SCRAPER:", e)
+        print("Playwright error:", e)
         return None
+
 
 # =========================
 # INICIO
 # =========================
-enviar_mensaje("🤖 Bot con Cloudscraper iniciado")
+enviar_mensaje("🤖 BOT DEFINITIVO (PLAYWRIGHT) INICIADO")
 
 print("Bot iniciado...")
 
 
 # =========================
-# LOOP
+# LOOP PRINCIPAL
 # =========================
 while True:
     try:
         procesar_comandos()
 
         if not ACTIVO:
-            print("⛔ bot apagado")
             time.sleep(10)
             continue
 
-        estado = obtener_estado(MODELO_URL)
+        estado = obtener_estado()
 
-        print("👉 ESTADO FINAL:", estado)
+        print("👉 ESTADO DETECTADO:", estado)
 
         if estado == "online":
             enviar_mensaje("🔥 MODELO ONLINE DETECTADA 🔥")
