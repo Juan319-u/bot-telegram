@@ -15,7 +15,7 @@ MODELOS = {
     "Victoria & Michael": "https://www.cbhours.com/user/victoria_and_michael.html",
     #"Kelly Fernandes": "https://www.cbhours.com/user/kellyfernandes.html",
     "Cristal Bunny": "https://www.cbhours.com/user/cristal_bunny.html",
-    https://www.cbhours.com/user/camilamonroee.html
+    "camila monroee;https://www.cbhours.com/user/camilamonroee.html"
     #"Jimmy Mia Couple": "https://www.cbhours.com/user/jimmymiacouple.html",
     #"Ashley Ospino": "https://www.cbhours.com/user/ashley_ospino.html",
     #"Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
