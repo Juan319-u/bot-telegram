@@ -5,23 +5,16 @@ import os
 import datetime
 
 # =========================
-# CONFIGURACIÓN
+# CONFIG
 # =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-MODELOS = {
-    "Victoria & Michael": "https://www.cbhours.com/user/victoria_and_michael.html",
-    "Kelly Fernandes": "https://www.cbhours.com/user/kellyfernandes.html",
-    "Cristal Bunny": "https://www.cbhours.com/user/cristal_bunny.html",
-    "Jimmy Mia Couple": "https://www.cbhours.com/user/jimmymiacouple.html",
-    "Ashley Ospino": "https://www.cbhours.com/user/ashley_ospino.html",
-    "Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
-}
+MODELO_URL = "https://www.cbhours.com/user/camilamonroee.html"
 
-estados_anteriores = {m: None for m in MODELOS}
+estado_anterior = None
 ACTIVO = True
 LAST_UPDATE_ID = 0
 
@@ -36,7 +29,7 @@ def enviar_mensaje(texto):
             "text": texto
         })
     except Exception as e:
-        print("Error enviando mensaje:", e)
+        print("Error enviar mensaje:", e)
 
 
 def enviar_menu():
@@ -56,7 +49,7 @@ def enviar_menu():
 
 
 # =========================
-# SCRAPER ESTADO
+# SCRAPER
 # =========================
 def obtener_estado(url):
     try:
@@ -64,10 +57,11 @@ def obtener_estado(url):
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        estado_div = soup.find("span", class_="room_status_text")
+        estado = soup.find("span", class_="room_status_text")
 
-        if estado_div:
-            clases = estado_div.get("class", [])
+        if estado:
+            clases = estado.get("class", [])
+
             if "online" in clases:
                 return "online"
             elif "offline" in clases:
@@ -75,49 +69,50 @@ def obtener_estado(url):
 
         return None
 
-    except:
+    except Exception as e:
+        print("Error scraping:", e)
         return None
 
 
 # =========================
-# COMANDOS TELEGRAM
+# COMANDOS
 # =========================
 def procesar_comandos():
     global ACTIVO, LAST_UPDATE_ID
 
     try:
         url = f"{BASE_URL}/getUpdates?offset={LAST_UPDATE_ID + 1}"
-        response = requests.get(url).json()
+        data = requests.get(url).json()
 
-        for update in response.get("result", []):
+        for update in data.get("result", []):
             LAST_UPDATE_ID = update["update_id"]
 
             if "message" not in update:
                 continue
 
-            mensaje = update["message"]
-            chat_id = str(mensaje.get("chat", {}).get("id"))
-            texto = mensaje.get("text", "").strip().lower()
+            msg = update["message"]
+            chat_id = str(msg.get("chat", {}).get("id"))
+            text = msg.get("text", "").strip().lower()
 
             if chat_id != str(CHAT_ID):
                 continue
 
-            print("Comando recibido:", texto)
+            print("Comando:", text)
 
             # =========================
-            # COMANDOS
+            # COMANDOS NUEVOS
             # =========================
-            if texto in ["/on", "on", "🟢 activar"]:
+            if text == "/on":
                 ACTIVO = True
                 enviar_mensaje("🟢 Bot ACTIVADO")
 
-            elif texto in ["/off", "off", "🔴 desactivar"]:
+            elif text == "/off":
                 ACTIVO = False
                 enviar_mensaje("🔴 Bot DESACTIVADO")
 
-            elif texto == "📊 estado":
+            elif text == "/status":
                 estado = "ACTIVO 🟢" if ACTIVO else "INACTIVO 🔴"
-                enviar_mensaje(f"Estado actual: {estado}")
+                enviar_mensaje(f"Estado: {estado}")
 
             enviar_menu()
 
@@ -128,56 +123,36 @@ def procesar_comandos():
 # =========================
 # INICIO
 # =========================
-enviar_mensaje("Bot iniciado correctamente")
+enviar_mensaje("🤖 Bot de prueba iniciado (1 modelo)")
 enviar_menu()
 
 
 # =========================
-# LOOP PRINCIPAL
+# LOOP
 # =========================
 while True:
     try:
         procesar_comandos()
 
         if not ACTIVO:
-            print("Bot pausado...")
-            time.sleep(20)
+            print("Bot apagado...")
+            time.sleep(15)
             continue
 
-        modelos_online = []
+        estado = obtener_estado(MODELO_URL)
+        print("Estado modelo:", estado)
 
-        for nombre, url in MODELOS.items():
-            estado = obtener_estado(url)
-            print(f"{nombre}: {estado}")
+        # 🔥 DETECCIÓN DE CAMBIO REAL
+        if estado == "online" and estado_anterior != "online":
+            enviar_mensaje("🔥 MODELO ONLINE DETECTADA 🔥")
 
-            # alerta cambio offline → online
-            if estado == "online" and estados_anteriores[nombre] != "online":
-                enviar_mensaje(f"🔥 {nombre} está ONLINE 🔥")
-
-            if estado == "online":
-                modelos_online.append(nombre)
-
-            estados_anteriores[nombre] = estado
-
-        # resumen
-        if len(modelos_online) > 1:
-            lista = "\n".join(modelos_online)
-            enviar_mensaje(f"🔥 {len(modelos_online)} modelos online:\n{lista}")
+        estado_anterior = estado
 
         # =========================
-        # TIEMPO INTELIGENTE
+        # frecuencia simple (debug)
         # =========================
-        hora = datetime.datetime.now().hour
-
-        if 18 <= hora <= 23:
-            tiempo_espera = 180
-        elif 0 <= hora <= 6:
-            tiempo_espera = 1200
-        else:
-            tiempo_espera = 600
-
-        time.sleep(tiempo_espera)
+        time.sleep(60)
 
     except Exception as e:
         print("Error general:", e)
-        time.sleep(60)
+        time.sleep(30)
