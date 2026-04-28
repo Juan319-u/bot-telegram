@@ -1,81 +1,103 @@
-import cloudscraper
 import requests
 import time
 import os
+from playwright.sync_api import sync_playwright
 
+# =========================
+# CONFIGURACIÓN
+# =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-URL = "https://www.cbhours.com/user/camilamonroee.html"
+MODELOS = {
+    "Victoria & Michael": "https://www.cbhours.com/user/victoria_and_michael.html",
+    #"Kelly Fernandes": "https://www.cbhours.com/user/kellyfernandes.html",
+    "Cristal Bunny": "https://www.cbhours.com/user/cristal_bunny.html",
+    #"Jimmy Mia Couple": "https://www.cbhours.com/user/jimmymiacouple.html",
+    #"Ashley Ospino": "https://www.cbhours.com/user/ashley_ospino.html",
+    #"Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
+}
 
-LAST_UPDATE_ID = 0
+estados_anteriores = {m: None for m in MODELOS}
 ACTIVO = True
-
-scraper = cloudscraper.create_scraper()
+LAST_UPDATE_ID = 0
 
 
 # =========================
 # TELEGRAM
 # =========================
-def send(msg):
-    requests.post(f"{BASE_URL}/sendMessage", data={
-        "chat_id": CHAT_ID,
-        "text": msg
-    })
+def enviar_mensaje(texto):
+    try:
+        requests.post(f"{BASE_URL}/sendMessage", data={
+            "chat_id": CHAT_ID,
+            "text": texto
+        }, timeout=10)
+    except Exception as e:
+        print("Error Telegram:", e)
 
 
 # =========================
 # COMANDOS
 # =========================
-def commands():
-    global LAST_UPDATE_ID, ACTIVO
+def procesar_comandos():
+    global ACTIVO, LAST_UPDATE_ID
 
     try:
-        r = requests.get(f"{BASE_URL}/getUpdates?offset={LAST_UPDATE_ID+1}").json()
+        url = f"{BASE_URL}/getUpdates?offset={LAST_UPDATE_ID + 1}"
+        response = requests.get(url, timeout=10).json()
 
-        for u in r.get("result", []):
-            LAST_UPDATE_ID = u["update_id"]
+        for update in response.get("result", []):
+            LAST_UPDATE_ID = update["update_id"]
 
-            if "message" not in u:
+            if "message" not in update:
                 continue
 
-            msg = u["message"]
-            chat_id = str(msg["chat"]["id"])
-            text = msg.get("text", "").lower()
+            msg = update["message"]
+            chat_id = str(msg.get("chat", {}).get("id"))
+            text = msg.get("text", "").strip().lower()
 
             if chat_id != str(CHAT_ID):
                 continue
 
+            print("Comando:", text)
+
             if text == "/on":
                 ACTIVO = True
-                send("🟢 ON")
+                enviar_mensaje("🟢 Bot ACTIVADO")
 
             elif text == "/off":
                 ACTIVO = False
-                send("🔴 OFF")
+                enviar_mensaje("🔴 Bot DESACTIVADO")
 
             elif text == "/status":
-                send(f"Estado: {'ACTIVO' if ACTIVO else 'INACTIVO'}")
+                enviar_mensaje(f"Estado: {'ACTIVO 🟢' if ACTIVO else 'INACTIVO 🔴'}")
 
 
     except Exception as e:
-        print("cmd error:", e)
+        print("Error comandos:", e)
 
 
 # =========================
-# SCRAPER SIMPLE (SIN SELCTORES)
+# PLAYWRIGHT INIT (IMPORTANTE)
 # =========================
-def check():
+print("Iniciando navegador...")
+
+play = sync_playwright().start()
+browser = play.chromium.launch(headless=True, args=["--no-sandbox"])
+page = browser.new_page()
+
+# =========================
+# SCRAPER REAL (REUTILIZA PÁGINA)
+# =========================
+def obtener_estado(url):
     try:
-        r = scraper.get(URL, timeout=15)
+        page.goto(url, timeout=60000)
+        page.wait_for_timeout(3000)
 
-        html = r.text.lower()
+        html = page.content().lower()
 
-        print("SIZE:", len(html))
-
-        # 🔥 búsqueda directa de texto
         if "online" in html:
             return "online"
         elif "offline" in html:
@@ -84,42 +106,48 @@ def check():
         return None
 
     except Exception as e:
-        print("scraper error:", e)
+        print("Playwright error:", e)
         return None
 
 
 # =========================
-# INIT
+# INICIO
 # =========================
-send("🤖 BOT SIMPLE INICIADO")
-print("bot iniciado")
+enviar_mensaje("🤖 Bot Playwright estable iniciado")
+print("Bot iniciado")
 
 
 # =========================
-# LOOP
+# LOOP PRINCIPAL
 # =========================
-last_state = None
-
 while True:
     try:
-        commands()
+        procesar_comandos()
 
         if not ACTIVO:
             time.sleep(10)
             continue
 
-        state = check()
+        modelos_online = []
 
-        print("STATE:", state)
+        for nombre, url in MODELOS.items():
+            estado = obtener_estado(url)
+            print(f"{nombre}: {estado}")
 
-        # 🔥 solo avisa cambios reales
-        if state == "online" and last_state != "online":
-            send("🔥 MODELO ONLINE")
+            if estado == "online" and estados_anteriores[nombre] != "online":
+                enviar_mensaje(f"🔥 {nombre} está ONLINE 🔥")
 
-        last_state = state
+            if estado == "online":
+                modelos_online.append(nombre)
+
+            estados_anteriores[nombre] = estado
+
+        if len(modelos_online) > 1:
+            lista = "\n".join(modelos_online)
+            enviar_mensaje(f"🔥 {len(modelos_online)} modelos online:\n{lista}")
 
         time.sleep(60)
 
     except Exception as e:
-        print("loop error:", e)
+        print("Error general:", e)
         time.sleep(10)
