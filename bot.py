@@ -7,68 +7,128 @@ import datetime
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-URL = "https://www.cbhours.com/user/victoria_and_michael.html"
+MODELOS = {
+    "Victoria & Michael": "https://www.cbhours.com/user/victoria_and_michael.html",
+    "Kelly Fernandes": "https://www.cbhours.com/user/kellyfernandes.html",
+    "Cristal Bunny": "https://www.cbhours.com/user/cristal_bunny.html",
+    "Jimmy Mia Couple": "https://www.cbhours.com/user/jimmymiacouple.html",
+    "Ashley Ospino": "https://www.cbhours.com/user/ashley_ospino.html",
+    "Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
+}
 
-estado_anterior = None
+estados_anteriores = {modelo: None for modelo in MODELOS}
+
+ACTIVO = True
+LAST_UPDATE_ID = None
 
 
 def enviar_mensaje(texto):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
-        requests.post(url, data={
-            "chat_id": CHAT_ID,
-            "text": texto
-        })
+        requests.post(url, data={"chat_id": CHAT_ID, "text": texto})
     except Exception as e:
         print("Error enviando mensaje:", e)
 
 
-def obtener_estado():
+def obtener_estado(url):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(URL, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
         estado_div = soup.find("span", class_="room_status_text")
 
         if estado_div:
             clases = estado_div.get("class", [])
-            print("Clases detectadas:", clases)
-
             if "online" in clases:
                 return "online"
             elif "offline" in clases:
                 return "offline"
 
         return None
-
     except Exception as e:
         print("Error obteniendo estado:", e)
         return None
 
 
-# 🔥 Mensaje único al iniciar
-enviar_mensaje("✅ Bot activo y monitoreando")
+# 🔥 Leer comandos de Telegram
+def revisar_comandos():
+    global ACTIVO, LAST_UPDATE_ID
+
+    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+    params = {"timeout": 5}
+
+    if LAST_UPDATE_ID:
+        params["offset"] = LAST_UPDATE_ID + 1
+
+    try:
+        response = requests.get(url, params=params).json()
+
+        for update in response.get("result", []):
+            LAST_UPDATE_ID = update["update_id"]
+
+            mensaje = update.get("message", {})
+            texto = mensaje.get("text", "")
+
+            if str(mensaje.get("chat", {}).get("id")) != CHAT_ID:
+                continue
+
+            if texto == "/on":
+                ACTIVO = True
+                enviar_mensaje("🟢 Bot ACTIVADO")
+
+            elif texto == "/off":
+                ACTIVO = False
+                enviar_mensaje("🔴 Bot DESACTIVADO")
+
+            elif texto == "/estado":
+                estado = "ACTIVO 🟢" if ACTIVO else "INACTIVO 🔴"
+                enviar_mensaje(f"Estado actual: {estado}")
+
+    except Exception as e:
+        print("Error leyendo comandos:", e)
+
+
+# 🔥 Mensaje inicial
+enviar_mensaje("✅ Bot con control remoto activo (/on /off /estado)")
 
 
 while True:
     try:
-        estado = obtener_estado()
-        print("Estado actual:", estado)
+        revisar_comandos()
 
-        # Notifica solo cuando pasan a ONLINE
-        if estado == "online" and estado_anterior != "online":
-            enviar_mensaje("🔥 ESTÁN ONLINE 🔥")
+        if not ACTIVO:
+            print("Bot desactivado...")
+            time.sleep(30)
+            continue
 
-        estado_anterior = estado
+        modelos_online = []
+
+        for nombre, url in MODELOS.items():
+            estado = obtener_estado(url)
+            print(f"{nombre}: {estado}")
+
+            if estado == "online" and estados_anteriores[nombre] != "online":
+                enviar_mensaje(f"🔥 {nombre} está ONLINE 🔥")
+
+            if estado == "online":
+                modelos_online.append(nombre)
+
+            estados_anteriores[nombre] = estado
+
+        if len(modelos_online) > 1:
+            lista = "\n".join(modelos_online)
+            enviar_mensaje(f"🔥 {len(modelos_online)} modelos online:\n{lista}")
 
         # ⏱️ Frecuencia inteligente
         hora = datetime.datetime.now().hour
 
         if 18 <= hora <= 23:
-            tiempo_espera = 540   # más frecuente
+            tiempo_espera = 180
+        elif 0 <= hora <= 6:
+            tiempo_espera = 1200
         else:
-            tiempo_espera = 900   # más lento
+            tiempo_espera = 600
 
         print(f"Esperando {tiempo_espera} segundos...")
         time.sleep(tiempo_espera)
