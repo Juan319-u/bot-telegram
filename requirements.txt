@@ -1,3 +1,3 @@
-playwright
+cloudscraper
 requests
 beautifulsoup4
