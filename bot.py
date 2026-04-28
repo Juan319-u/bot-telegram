@@ -1,8 +1,12 @@
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
+import requests
 import time
 import os
 
+# =========================
+# CONFIG
+# =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
@@ -12,6 +16,9 @@ MODELO_URL = "https://www.cbhours.com/user/camilamonroee.html"
 
 LAST_UPDATE_ID = 0
 ACTIVO = True
+
+# Scraper con bypass Cloudflare
+scraper = cloudscraper.create_scraper()
 
 
 # =========================
@@ -24,7 +31,7 @@ def enviar_mensaje(texto):
             "text": texto
         })
     except Exception as e:
-        print("Error Telegram:", e)
+        print("Telegram error:", e)
 
 
 # =========================
@@ -50,7 +57,7 @@ def procesar_comandos():
             if chat_id != str(CHAT_ID):
                 continue
 
-            print("📩 Comando recibido:", text)
+            print("📩 comando:", text)
 
             if text == "/on":
                 ACTIVO = True
@@ -68,21 +75,17 @@ def procesar_comandos():
 
 
 # =========================
-# SCRAPER DEBUG
+# SCRAPER (CLOUDFLARE BYPASS)
 # =========================
 def obtener_estado(url):
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
+        r = scraper.get(url, timeout=15)
 
-        r = requests.get(url, headers=headers, timeout=15)
-
-        print("\n====================")
-        print("STATUS CODE:", r.status_code)
+        print("\n===================")
+        print("STATUS:", r.status_code)
         print("HTML SIZE:", len(r.text))
-        print("HTML SAMPLE:\n", r.text[:800])
-        print("====================\n")
+        print("SAMPLE:\n", r.text[:500])
+        print("===================\n")
 
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -90,27 +93,28 @@ def obtener_estado(url):
 
         if estado:
             clases = estado.get("class", [])
-            print("CLASES DETECTADAS:", clases)
+            print("CLASES:", clases)
 
             if "online" in clases:
                 return "online"
             elif "offline" in clases:
                 return "offline"
 
-        print("⚠ NO SE ENCONTRÓ EL SELECTOR")
+        print("⚠ no se encontró selector")
         return None
 
     except Exception as e:
-        print("ERROR SCRAPER:", e)
+        print("SCRAPER ERROR:", e)
         return None
 
 
 # =========================
 # INICIO
 # =========================
-enviar_mensaje("🤖 BOT DEBUG INICIADO")
+enviar_mensaje("🤖 Bot con Cloudscraper iniciado")
 
 print("Bot iniciado...")
+
 
 # =========================
 # LOOP
@@ -120,13 +124,13 @@ while True:
         procesar_comandos()
 
         if not ACTIVO:
-            print("⛔ Bot pausado")
+            print("⛔ bot apagado")
             time.sleep(10)
             continue
 
         estado = obtener_estado(MODELO_URL)
 
-        print("👉 ESTADO FINAL DETECTADO:", estado)
+        print("👉 ESTADO FINAL:", estado)
 
         if estado == "online":
             enviar_mensaje("🔥 MODELO ONLINE DETECTADA 🔥")
