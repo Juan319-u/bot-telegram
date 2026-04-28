@@ -4,8 +4,13 @@ import time
 import os
 import datetime
 
+# =========================
+# CONFIGURACIÓN
+# =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 MODELOS = {
     "Victoria & Michael": "https://www.cbhours.com/user/victoria_and_michael.html",
@@ -16,20 +21,43 @@ MODELOS = {
     "Susie Thomsonn": "https://www.cbhours.com/user/susie_thomsonn.html"
 }
 
-estados_anteriores = {modelo: None for modelo in MODELOS}
-
+estados_anteriores = {m: None for m in MODELOS}
 ACTIVO = True
-LAST_UPDATE_ID = None
+LAST_UPDATE_ID = 0
 
 
+# =========================
+# TELEGRAM
+# =========================
 def enviar_mensaje(texto):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": texto})
+        requests.post(f"{BASE_URL}/sendMessage", data={
+            "chat_id": CHAT_ID,
+            "text": texto
+        })
     except Exception as e:
         print("Error enviando mensaje:", e)
 
 
+def enviar_menu():
+    teclado = {
+        "keyboard": [
+            ["🟢 Activar", "🔴 Desactivar"],
+            ["📊 Estado"]
+        ],
+        "resize_keyboard": True
+    }
+
+    requests.post(f"{BASE_URL}/sendMessage", json={
+        "chat_id": CHAT_ID,
+        "text": "Control del bot 👇",
+        "reply_markup": teclado
+    })
+
+
+# =========================
+# SCRAPER ESTADO
+# =========================
 def obtener_estado(url):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -46,65 +74,74 @@ def obtener_estado(url):
                 return "offline"
 
         return None
-    except Exception as e:
-        print("Error obteniendo estado:", e)
+
+    except:
         return None
 
 
-# 🔥 Leer comandos de Telegram
-def revisar_comandos():
+# =========================
+# COMANDOS TELEGRAM
+# =========================
+def procesar_comandos():
     global ACTIVO, LAST_UPDATE_ID
 
-    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-
     try:
+        url = f"{BASE_URL}/getUpdates?offset={LAST_UPDATE_ID + 1}"
         response = requests.get(url).json()
 
         for update in response.get("result", []):
-            update_id = update["update_id"]
-
-            if LAST_UPDATE_ID is not None and update_id <= LAST_UPDATE_ID:
-                continue
-
-            LAST_UPDATE_ID = update_id
+            LAST_UPDATE_ID = update["update_id"]
 
             if "message" not in update:
                 continue
 
             mensaje = update["message"]
             chat_id = str(mensaje.get("chat", {}).get("id"))
-            texto = mensaje.get("text", "")
+            texto = mensaje.get("text", "").strip().lower()
+
+            if chat_id != str(CHAT_ID):
+                continue
 
             print("Comando recibido:", texto)
 
-            if chat_id != CHAT_ID:
-                continue
-
-            if texto == "/on":
+            # =========================
+            # COMANDOS
+            # =========================
+            if texto in ["/on", "on", "🟢 activar"]:
                 ACTIVO = True
                 enviar_mensaje("🟢 Bot ACTIVADO")
 
-            elif texto == "/off":
+            elif texto in ["/off", "off", "🔴 desactivar"]:
                 ACTIVO = False
                 enviar_mensaje("🔴 Bot DESACTIVADO")
 
-            elif texto == "/estado":
+            elif texto == "📊 estado":
                 estado = "ACTIVO 🟢" if ACTIVO else "INACTIVO 🔴"
                 enviar_mensaje(f"Estado actual: {estado}")
 
+            enviar_menu()
+
     except Exception as e:
-        print("Error leyendo comandos:", e)
-# 🔥 Mensaje inicial
-enviar_mensaje("✅ Bot con control remoto activo (/on /off /estado)")
+        print("Error comandos:", e)
 
 
+# =========================
+# INICIO
+# =========================
+enviar_mensaje("Bot iniciado correctamente")
+enviar_menu()
+
+
+# =========================
+# LOOP PRINCIPAL
+# =========================
 while True:
     try:
-        revisar_comandos()
+        procesar_comandos()
 
         if not ACTIVO:
-            print("Bot desactivado...")
-            time.sleep(30)
+            print("Bot pausado...")
+            time.sleep(20)
             continue
 
         modelos_online = []
@@ -113,6 +150,7 @@ while True:
             estado = obtener_estado(url)
             print(f"{nombre}: {estado}")
 
+            # alerta cambio offline → online
             if estado == "online" and estados_anteriores[nombre] != "online":
                 enviar_mensaje(f"🔥 {nombre} está ONLINE 🔥")
 
@@ -121,11 +159,14 @@ while True:
 
             estados_anteriores[nombre] = estado
 
+        # resumen
         if len(modelos_online) > 1:
             lista = "\n".join(modelos_online)
             enviar_mensaje(f"🔥 {len(modelos_online)} modelos online:\n{lista}")
 
-        # ⏱️ Frecuencia inteligente
+        # =========================
+        # TIEMPO INTELIGENTE
+        # =========================
         hora = datetime.datetime.now().hour
 
         if 18 <= hora <= 23:
@@ -135,7 +176,6 @@ while True:
         else:
             tiempo_espera = 600
 
-        print(f"Esperando {tiempo_espera} segundos...")
         time.sleep(tiempo_espera)
 
     except Exception as e:
