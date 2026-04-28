@@ -56,21 +56,28 @@ def revisar_comandos():
     global ACTIVO, LAST_UPDATE_ID
 
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    params = {"timeout": 5}
-
-    if LAST_UPDATE_ID:
-        params["offset"] = LAST_UPDATE_ID + 1
 
     try:
-        response = requests.get(url, params=params).json()
+        response = requests.get(url).json()
 
         for update in response.get("result", []):
-            LAST_UPDATE_ID = update["update_id"]
+            update_id = update["update_id"]
 
-            mensaje = update.get("message", {})
+            if LAST_UPDATE_ID is not None and update_id <= LAST_UPDATE_ID:
+                continue
+
+            LAST_UPDATE_ID = update_id
+
+            if "message" not in update:
+                continue
+
+            mensaje = update["message"]
+            chat_id = str(mensaje.get("chat", {}).get("id"))
             texto = mensaje.get("text", "")
 
-            if str(mensaje.get("chat", {}).get("id")) != CHAT_ID:
+            print("Comando recibido:", texto)
+
+            if chat_id != CHAT_ID:
                 continue
 
             if texto == "/on":
@@ -87,8 +94,6 @@ def revisar_comandos():
 
     except Exception as e:
         print("Error leyendo comandos:", e)
-
-
 # 🔥 Mensaje inicial
 enviar_mensaje("✅ Bot con control remoto activo (/on /off /estado)")
 
