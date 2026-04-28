@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import os
+import datetime
 
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -46,18 +47,31 @@ def obtener_estado():
         return None
 
 
+# 🔥 Mensaje único al iniciar
+enviar_mensaje("✅ Bot activo y monitoreando")
+
+
 while True:
     try:
         estado = obtener_estado()
         print("Estado actual:", estado)
 
-        # Solo notifica cuando pasan a ONLINE
+        # Notifica solo cuando pasan a ONLINE
         if estado == "online" and estado_anterior != "online":
             enviar_mensaje("🔥 ESTÁN ONLINE 🔥")
 
         estado_anterior = estado
 
-        time.sleep(600)
+        # ⏱️ Frecuencia inteligente
+        hora = datetime.datetime.now().hour
+
+        if 18 <= hora <= 23:
+            tiempo_espera = 540   # más frecuente
+        else:
+            tiempo_espera = 900   # más lento
+
+        print(f"Esperando {tiempo_espera} segundos...")
+        time.sleep(tiempo_espera)
 
     except Exception as e:
         print("Error general:", e)
